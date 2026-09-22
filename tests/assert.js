@@ -12,6 +12,16 @@ function assertEqual(actual, expected, message) {
     }
 }
 
+function assertThrows(fn, message) {
+    count += 1;
+    try {
+        fn();
+    } catch (e) {
+        return;
+    }
+    throw new Error(`${message}: expected to throw, but did not`);
+}
+
 function assertCount() {
     return count;
 }
