@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gjs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gjs
+
+      - name: Print gjs version
+        run: gjs --version
+
+      - name: Run test suite
+        run: |
+          # Single source of truth for the interpreter invocation. If #5 converts
+          # lib/hebrewDate.js to ESM, flip this one token to "gjs -m".
+          gjs_cmd="gjs"
+
+          shopt -s nullglob
+          tests=(tests/*.test.js)
+
+          if [ ${#tests[@]} -eq 0 ]; then
+            echo "No test files matched tests/*.test.js" >&2
+            exit 1
+          fi
+
+          status=0
+          for test in "${tests[@]}"; do
+            echo "== $test =="
+            "$gjs_cmd" "$test" || status=1
+          done
+
+          exit "$status"
