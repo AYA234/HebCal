@@ -13,16 +13,30 @@ a vertical `St.BoxLayout` with two labels: `this._dayLabel` (style class `day-la
 and `this._dateLabel` (style class `date-label`), both filled by
 `TodayButton.setDate(date)`.
 
-We reach it by **function injection**: save `TodayButton.prototype.setDate`, replace
+`TodayButton` is a module-local class in `js/ui/dateMenu.js`; under GNOME 45+ ES
+modules an extension can only import what that module exports, and it does not export
+`TodayButton` — only `DateMenuButton`. So we cannot reach the class or its prototype
+from outside. We reach the one instance that exists instead: `enable()` reads
+`Main.panel.statusArea.dateMenu._date`, which is the live `TodayButton` already
+running in the shell, and patches **that instance's** `setDate`, not
+`TodayButton.prototype.setDate`. We save the instance's own original method, replace
 it with a wrapper that calls the original (so the Gregorian date keeps working
-untouched) and then writes the Hebrew date into a label we add to the same box. We
-never subclass or replace `DateMenuButton` or `TodayButton` themselves — we extend
-the one already running in the shell.
+untouched) and then writes the Hebrew date into a label we add to the same box. There
+is exactly one `TodayButton` in a running shell and the wrapper closes over exactly
+one label, so an instance patch is both the only route available and the correct one
+— a prototype patch, even if it were reachable, would have every future instance
+sharing a wrapper built around a single label actor.
 
 Two alternatives considered and rejected:
 
-- **A second top-bar indicator.** The obvious wrong answer, named only to be clear
-  it's rejected — it fails the project's one hard rule outright.
+- **Subclassing or replacing `DateMenuButton` wholesale.** `DateMenuButton` *is*
+  exported, so this is technically reachable, unlike a `TodayButton` subclass. But
+  `Main.panel.statusArea.dateMenu` is set once at shell startup; replacing it means
+  either monkey-patching the panel's `statusArea` entry (holding and restoring far
+  more state — the whole button, its signal connections, its actor tree) or
+  reimplementing everything `DateMenuButton` already does around the one line we
+  need. It fails criterion 3 before it fails anything else: the teardown surface
+  is the entire menu instead of one method reference and one label.
 - **Injecting into the day-grid cells** (`Calendar._rebuildCalendar()` in
   `calendar.js`, which builds an `St.Button` per day with a `label` property). This
   would put a Hebrew day number in every one of the ~42 cells, every month
@@ -32,7 +46,10 @@ Two alternatives considered and rejected:
 
 `setDate(date)` already receives the date we need as an argument, so this seam also
 avoids listening for our own clock/tick signal — we ride the update the shell already
-performs.
+performs. That said, how often the shell actually calls `setDate` (assumed: on
+civil-midnight rollover, and whenever the calendar popup logic re-syncs) is not
+something we've verified — see open question 1, which now also carries this
+assumption.
 
 ## 2. Target version
 
@@ -44,41 +61,87 @@ not a footnote — see open question 2.
 
 ## 3. Clean teardown
 
-What we hold: the original `TodayButton.prototype.setDate` function reference, and
-the `St.Label` actor we created and added to the box.
+What we hold: the original `setDate` function reference taken from the live
+`Main.panel.statusArea.dateMenu._date` instance (not the prototype — see section 1),
+and the `St.Label` actor we created and added to the box.
+
+`enable()`:
+1. Look up `Main.panel.statusArea.dateMenu._date`. If it, its `setDate`, or its
+   internal box aren't there, **return quietly** — no exception, no half-applied
+   state. This is private API on an unpinned point-release range; the single most
+   visible way to break the "not part of GNOME" bar is an uncaught exception out of
+   `enable()` producing the shell's own "extension error" notification. Silence on a
+   missing surface is a deliberate choice, not an oversight.
+2. Save the instance's current `setDate`, wrap it, assign the wrapper.
+3. Create the label, add it to the box, and **paint it immediately** from today's
+   date — not just from the next `setDate` call. Extensions are disabled and
+   re-enabled on every screen lock by default, so the gap between `enable()` and the
+   next shell-driven `setDate` call is not a rare window; it's what a user sees after
+   every unlock if we leave it empty.
 
 `disable()`:
-1. Restore `TodayButton.prototype.setDate = original`.
+1. Restore the instance's `setDate = original`.
 2. Destroy the label actor (removes it from the `St.BoxLayout` and frees it).
 
 Nothing else is held — no extra signal connections, no timers, no GSettings. The
-failure we're avoiding: patching the prototype twice across a disable/enable cycle
+failure we're avoiding: patching the instance twice across a disable/enable cycle
 (leaving a wrapper-of-a-wrapper, or two Hebrew labels stacked in the box). Storing
 the *original* function once, at `enable()` time, and always restoring exactly that
 reference, keeps re-enable idempotent.
 
 ## 4. Hebrew date computation
 
-Primary plan: use the platform's own `Intl.DateTimeFormat` with the Hebrew calendar
-(`new Intl.DateTimeFormat('en-u-ca-hebrew', {...}).format(date)`), which needs no
-bundled dependency at all — GJS's SpiderMonkey runtime carries its own ICU. This is
-the cleanest possible answer to "how does it ship inside a GJS extension with no
-runtime package manager": nothing ships, it's already there.
+**Decided: the platform's own `Intl.DateTimeFormat` with the Hebrew calendar.**
+Verified in this environment by installing `gjs 1.80.2` — the exact version Ubuntu
+24.04 ships and GNOME Shell 46 runs on:
 
-This is unverified in this environment (no GJS to run it against) — see open
-question 1. If GNOME Shell 46's mozjs build turns out to lack Hebrew calendar
-support in `Intl`, the fallback is our own pure-JS arithmetic conversion
-(Dershowitz & Reingold's algorithm, the same family used by the `hebcal` project
-itself): compute the Hebrew year from the Gregorian year, apply the four
-postponement rules (*dechiyot*) to fix Rosh Hashanah's weekday, derive year length
-(deficient/regular/complete: 353–355 days, or 383–385 in a leap year), and use the
-metonic 19-year cycle (leap in years 3, 6, 8, 11, 14, 17, 19 of the cycle) to decide
-whether the year has one Adar or two. In a leap year, day-of-year arithmetic simply
-treats Adar I and Adar II as two separate months in sequence; no special-casing
-beyond that is needed once the year-length table is right.
+```
+new Intl.DateTimeFormat('en-u-ca-hebrew').format(...)  →  correct Gregorian→Hebrew conversion
+new Intl.DateTimeFormat('he-u-ca-hebrew').format(...)  →  Hebrew month names in Hebrew script (בְּ...אֱלוּל, confirmed by codepoint, not just terminal display)
+15 Mar 2024 → "5 Adar II 5784"                          →  leap year and Adar I/II handled correctly
+resolvedOptions().calendar === 'hebrew'
+```
 
-Either path is a pure function of a Gregorian date in, a Hebrew date out — no GNOME
-dependency either way, which is what makes criterion 8 possible.
+This needs no bundled dependency at all — GJS's SpiderMonkey runtime carries its own
+ICU, so nothing ships beyond our own code. The prior revision's open question 1 —
+whether GJS's ICU actually supports the Hebrew calendar — is closed: yes, it works,
+on the exact runtime we target. There is no fallback algorithm in this plan —
+`CLAUDE.md` rules out speculative options, and a rejected alternative kept "in case"
+is exactly that.
+
+**But the `hebr` numbering system is not supported**, verified three ways on the same
+runtime:
+
+```
+'he-u-ca-hebrew-nu-hebr'                      → resolvedOptions().numberingSystem === 'latn'  (nu-hebr silently dropped)
+{numberingSystem: 'hebr'} option              → resolvedOptions().numberingSystem === 'latn'
+Intl.supportedValuesOf('numberingSystem')     → does not include 'hebr'
+```
+
+So `Intl` alone gives us `11 בתשרי 5787`, never `י״א בתשרי תשפ״ז`. This is not
+independent of the rendering question the prior revision left open — it decides
+whether the `Intl` path is sufficient on its own (it is, for the non-Hebrew case) or
+whether we also need our own numeral formatting (we do, for the Hebrew case). The
+product decision, which closes the prior revision's open questions 3 and 4:
+**Hebrew script with gematria numerals when the shell locale is Hebrew; `11 Tishri
+5787` in the interface language otherwise.**
+
+That means two pieces of computation, both pure functions with no GNOME dependency:
+
+- The Hebrew calendar date itself, via `Intl.DateTimeFormat(..., {day: 'numeric',
+  month: 'long', year: 'numeric'}).formatToParts(date)` — read with the `en-u-ca-hebrew`
+  locale to get plain numeric day/year and an English month name reliably, regardless
+  of which numbering system was silently substituted.
+- A small **gematria formatter** (number → Hebrew numeral string, e.g. `11` →
+  `י״א`, `5787` → `תשפ״ז`, with the standard geresh/gershayim marks), used only for
+  the Hebrew-locale case, together with a Hebrew month-name table for gematria mode
+  (twelve entries plus Adar I/II, not derived from `Intl` since we need script output
+  independent of its numbering-system gap). Small, pure, and unit-testable per
+  section 8.
+
+Either the plain `Intl` formatting or the `Intl` + gematria path is a pure function
+of a Gregorian date in, a formatted string out — no GNOME dependency either way,
+which is what makes criterion 8 possible.
 
 ## 5. Rollover
 
@@ -89,26 +152,45 @@ date (civil midnight), not at sunset. In one sentence: if you open the calendar 
 Gregorian date, not the Hebrew date that — by Jewish tradition — already began at
 sunset a few hours earlier. Sunset-aware rollover is out of scope for v1 (see
 section 7); it would need a location or timezone-sunset source we don't have yet.
+The seam for it later: the conversion (section 4) takes the date to convert as its
+only input, so sunset support means shifting that input by a day under some future
+condition, not reworking the conversion or the injection.
 
 ## 6. Native by inheritance
 
 The Hebrew date becomes a third `St.Label`, added as a child of the same
 `St.BoxLayout` that already holds `_dayLabel` and `_dateLabel`, placed after
-`_dateLabel`. We give it the existing `date-label` style class rather than inventing
-one — it inherits that rule's font family, size, color and spacing straight from the
-shell's own stylesheet, so it matches the Gregorian date line by construction, not
-by copying values. We do not set an explicit `x_align`, matching how `_dateLabel`
-itself is built, so it inherits the same alignment behavior rather than a hardcoded
-one.
+`_dateLabel`. We do not set an explicit `x_align`, matching how `_dateLabel` itself
+is built, so it inherits the same alignment behavior rather than a hardcoded one.
+
+**Visual weight, decided explicitly, not by convenience:** we checked first whether
+GNOME Shell's own stylesheet has a ready-made "secondary line" rule we could inherit
+the way GTK apps inherit `dim-label` — it does not. Reading the `gnome-46`
+`gnome-shell-sass` source (`_calendar.scss`, `_common.scss`, `_misc.scss`,
+`widgets.scss`'s full import list), the shell's St theme has no `.dim-label`
+equivalent; the nearest precedent, `$insensitive_fg_color`, is a Sass build-time
+variable baked into specific compiled classes (`.event-time`, `.events-title`), not
+something our extension's own runtime stylesheet can reference without either
+hardcoding the resolved color — which criterion 6 rules out — or relying on a named
+theme-color alias we have not confirmed exists in the compiled CSS a live session
+would show us.
+
+Given that, **v1 keeps plain `date-label`, unchanged, at equal visual weight** to the
+Gregorian line. This is the purest form of inheritance available: zero self-authored
+CSS, and no guessing at a de-emphasis mechanism we can't verify without a running
+shell. It is a decision, not the default we'd get by not thinking about it — and it
+trades a design nicety (subordinate line) for staying strictly inside what's proven.
+Revisiting a dimmer treatment, once a live session lets us confirm a real,
+theme-native way to do it without hardcoding a color, is folded into open question 1
+below rather than guessed at here.
 
 RTL/LTR: the label's own text is Hebrew and Pango's bidi algorithm handles that
 regardless of the shell's overall text direction. We do not hardcode direction or
 alignment on the new label, so it follows the same rules the rest of the popup
 already follows for this locale.
 
-Non-Hebrew locale: open question — whether the date renders in Hebrew script and
-Hebrew numerals always, or transliterates into the interface language (e.g. "10
-Tishrei 5787") when the system isn't Hebrew. See open question 3.
+Non-Hebrew locale: resolved in section 4 — Hebrew script with gematria numerals when
+the shell locale is Hebrew, `11 Tishri 5787` (interface language) otherwise.
 
 Grid layout: untouched. We never touch `Calendar` or `_rebuildCalendar()`; the day
 grid and the events/clocks/weather sections below it are unaffected. Only
@@ -126,25 +208,51 @@ show up.
 
 ## 8. Provable without a live GNOME session
 
-Pure and testable here: the Hebrew date conversion (section 4), whichever path it
-ends up on. It takes a Gregorian date, returns a Hebrew date, and touches nothing
-from `gi`/`St`/`Clutter`/`Main`. It gets its own module with no shell imports, run
-and asserted against known reference dates with `gjs tests/<name>.js` (GJS runs
-plain JS with no `imports.gi` usage fine, no display required). That command is what
-CI and this environment can both actually run.
+**Runner:** `gjs`, matching the shell's own mozjs rather than Node's own ICU build.
+It is **not preinstalled** in this environment or assumed present anywhere else —
+installing it (`apt-get update && apt-get install -y gjs`, available in Ubuntu's
+`noble/main`) is a prerequisite step, not a given. There is currently **no CI
+configured in this repository** (no `.github/` directory) — section 8 does not claim
+otherwise; setting one up is not scoped into the four issues in section 9 below.
 
-Not testable here, honestly: whether the injection finds the real `_date` /
-`_dateLabel` / `TodayButton` in an actual running shell, whether the label renders
-where and how we expect, RTL layout in a Hebrew locale, whether disable/enable
-cycles leave anything behind, whether the grid genuinely doesn't shift. Those need a
-real GNOME Shell 46 session and a documented manual pass:
+Pure and testable here, run with `gjs tests/<name>.js` (GJS runs plain JS with no
+`imports.gi` usage fine, no display required):
+
+- **The Hebrew date conversion and gematria formatter** (section 4). Takes a
+  Gregorian date, returns a formatted string. Touches nothing from
+  `gi`/`St`/`Clutter`/`Main`. Asserted against known reference dates, including a
+  leap year (Adar I/II) and both the Hebrew-script and interface-language output
+  modes.
+- **The injection module's disable/enable idempotence**, previously left entirely
+  as "confirm by eye." The injection module takes its target as an argument instead
+  of reaching for `Main.panel.statusArea.dateMenu._date` itself, so it can be driven
+  against a plain-JS fake in place of a real `TodayButton`: an object with a
+  `setDate` method, and a box stub exposing `add_child`/`remove_child`/`destroy`.
+  Against that fake we assert:
+  (a) the original `setDate` still runs and still receives its date argument,
+  (b) exactly one label is added to the box,
+  (c) after teardown, the target's `setDate` is `===` the saved original, and the
+  label was destroyed,
+  (d) enable → disable → enable, twice, leaves exactly one label and no
+  wrapper-of-a-wrapper.
+  This is the automated half of "no leftovers after disable/enable cycles," and it
+  needs no display. It does not prove the fake matches the real `TodayButton`'s
+  shape — that's what the manual pass below is for.
+
+Not testable here, honestly: whether `Main.panel.statusArea.dateMenu._date` and its
+internals actually match what the injection module expects in a real running shell,
+whether the label renders where and how we expect, RTL layout in a Hebrew locale,
+whether the grid genuinely doesn't shift. Those need a real GNOME Shell 46 session
+and a documented manual pass:
 1. Symlink the extension into `~/.local/share/gnome-shell/extensions/`.
 2. Restart the shell (X11: Alt+F2, `r`; Wayland: log out and back in) and enable it
    via the Extensions app.
-3. Open the calendar, confirm the Hebrew date appears under the Gregorian one with
-   no visible font/color mismatch and no grid shift.
-4. Disable, re-enable, repeat several times; confirm no duplicate or leftover label.
-5. Switch to a Hebrew locale and repeat step 3.
+3. Open the calendar, confirm the Hebrew date appears under the Gregorian one,
+   already filled in (not blank), with no visible font/color mismatch and no grid
+   shift.
+4. Disable, re-enable, repeat several times, including across a simulated screen
+   lock; confirm no duplicate or leftover label.
+5. Switch to a Hebrew locale and repeat step 3, confirming gematria numerals.
 
 No implementation issue should claim more than this section promises.
 
@@ -152,19 +260,20 @@ No implementation issue should claim more than this section promises.
 
 1. **Scaffold** — `metadata.json`, `extension.js` with empty `enable()`/`disable()`.
    First, because nothing else is installable or reviewable without it.
-2. **Hebrew date conversion module**, with unit tests per section 8. No GNOME
-   dependency, so it can be built and fully reviewed on its own — and everything
-   after this needs a date to show.
-3. **Inject the label into `TodayButton`**, wired to a fixed test value, with full
-   teardown per section 3. Proves the seam and the disable/enable story before
-   correctness of the date matters.
-4. **Wire the real conversion into the label**, replacing the fixed test value.
-   Small, isolated integration commit.
-5. **Theming/RTL pass** — confirm style-class choice and locale behavior from
-   section 6 against a real session; only needed if the manual pass in issue 3 or 4
-   turns up a mismatch.
-6. **Packaging** — README, `extensions.gnome.org` submission requirements, final
-   manual-verification pass from section 8.
+2. **Hebrew date conversion module + gematria formatter**, with unit tests per
+   section 8. No GNOME dependency, so it can be built and fully reviewed on its own
+   — and everything after this needs a date to show.
+3. **Inject the label into the live `TodayButton` instance, wired to the real
+   conversion from the start**, with full teardown and the fake-target tests from
+   section 8, plus the theming/RTL checks from section 6 folded into its acceptance
+   criteria. One issue, not staged behind a fixed test value: a fixed value would
+   ship something installable but showing a made-up date, which isn't
+   "working" in the sense this plan is held to, and the conversion module already
+   exists by the time this issue starts.
+4. **Packaging** — README and the final manual-verification pass from section 8.
+   No `extensions.gnome.org` submission: publishing to a public registry is an
+   outward-facing release action on an account neither of us has, and out of scope
+   for this issue breakdown.
 
 Order follows dependency, not difficulty: each issue leaves the extension
 installable and working, and nothing after issue 2 can be honestly tested without
@@ -172,19 +281,14 @@ issue 1, and nothing visual can be tried without issue 3's seam existing first.
 
 ## 10. Open questions
 
-1. Does GNOME Shell 46's bundled GJS/mozjs actually support the Hebrew calendar in
-   `Intl.DateTimeFormat`? This decides which branch of section 4 we build. Needs a
-   `gjs -c "print(new Intl.DateTimeFormat('en-u-ca-hebrew').format(new Date()))"`
-   check in a real environment before issue 2 is written up.
-2. All internal names in this plan (`_date`, `_dateLabel`, `_dayLabel`,
-   `TodayButton`, the `date-label`/`day-label` style classes) come from reading the
+1. All internal names in this plan (`_date`, `_dateLabel`, `_dayLabel`,
+   `TodayButton`, the `date-label`/`day-label` style classes, and the assumption
+   that `setDate` is called on civil-midnight rollover) come from reading the
    `gnome-46` branch of `gnome-shell` source, not from introspecting a running
    session. They need confirming against the actual installed Ubuntu 24.04 shell
-   before issue 3 starts.
-3. Hebrew script and numerals always, or transliterated into the interface language
-   for non-Hebrew locales? This is a product call, not an engineering one.
-4. Exact format string for the new line (e.g. "10 Tishrei 5787" vs Hebrew script) —
-   depends on question 3, but needs one canonical answer before issue 4.
-5. Do we pin to exactly GNOME Shell 46.0, or accept the whole 46.x range Ubuntu
+   before issue 3 starts. While there, also check whether the compiled theme
+   exposes any named color we could use to dim the Hebrew line without hardcoding
+   one (section 6) — worth a follow-up issue if it does, not required for v1.
+2. Do we pin to exactly GNOME Shell 46.0, or accept the whole 46.x range Ubuntu
    24.04 has shipped as point updates? Depends on whether the private names in
-   question 2 are stable across those points — unknown from here.
+   question 1 are stable across those points — unknown from here.
