@@ -1,7 +1,8 @@
 # HebCal plan
 
-Target: Ubuntu 24.04 LTS, GNOME Shell 46. Everything below is judged against one bar:
-if the user can tell our code isn't part of GNOME, it's wrong.
+Target: GNOME Shell 50 (the `50.x` line); one machine, "Ubuntu" per its owner, no
+release number confirmed — see §2. Everything below is judged against one bar: if
+the user can tell our code isn't part of GNOME, it's wrong.
 
 ## 1. Attachment point
 
@@ -53,11 +54,37 @@ assumption.
 
 ## 2. Target version
 
-Built and tested against **GNOME Shell 46**, the default shell on **Ubuntu 24.04
-LTS**. We do not claim to support 45, 47, or any other Ubuntu release. These are
-private internals (`_date`, `_dateLabel`, `TodayButton`, `_rebuildCalendar` are not
-part of any stable extension API), so a point release changing them is a real risk,
-not a footnote — see open question 2.
+**Declared: GNOME Shell 50** (the `50.x` line, via `metadata.json`'s
+`shell-version: ["50"]`). Not 46, and not both.
+
+`shell-version` is a statement to the shell's loader — "load me here" — and this
+declares the one shell this project has ever actually run against. 46 was chosen by
+reading the `gnome-46` branch of `gnome-shell` source (§10, open question 1); no
+HebCal code has ever executed on a GNOME Shell 46, and the guard (§3) means a wrong
+guess there would be invisible. 50.1 is the only shell that has run it — loaded and
+enabled, once, on one machine, after the machine's owner hand-patched `metadata.json`
+locally to add `"50"`; that patch has never been in this repo. **Whether the Hebrew
+date renders in the calendar popover has not been confirmed by eye on any shell** —
+see §10.
+
+Major-version form, not a pinned point release: `shell-version` accepts a major
+version covering all its point releases, so `"50"` covers the 50.1 that actually ran.
+Getting this declaration wrong is no longer a prediction — it is now an observed
+failure mode: an under-declared `shell-version` produces `State: OUT OF DATE`,
+enabled but never loaded, nothing rendered, nothing reported (§10, open question 2).
+A user who updates their shell and silently loses the feature is worse than the
+internals risk a wider range carries.
+
+No support is claimed for GNOME Shell 46, or any other major. These are private
+internals (`_date`, `_dateLabel`, `TodayButton`, `_rebuildCalendar` are not part of
+any stable extension API), so a point release changing them is a real, ongoing risk —
+see open question 1.
+
+**Known gap this opens:** the test suite asserts exact ICU-produced strings verified
+under `gjs 1.80.2`, which is why CI pins `ubuntu-24.04` rather than `ubuntu-latest`
+(§8). That pin matches the gjs/ICU pair GNOME Shell 46 ran; now that `"50"` is
+declared, CI's runtime and the only shell this project claims no longer match. Not
+closed here — see §8.
 
 ## 3. Clean teardown
 
