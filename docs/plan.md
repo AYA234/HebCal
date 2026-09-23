@@ -282,7 +282,11 @@ show up.
 It is **not preinstalled** in this environment or assumed present anywhere else —
 installing it (`apt-get update && apt-get install -y gjs`, available in Ubuntu's
 `noble/main`) is a prerequisite step, not a given. CI runs the suite on every push
-and pull request via `.github/workflows/tests.yml`, on `ubuntu-24.04`.
+and pull request via `.github/workflows/tests.yml`, on `ubuntu-24.04`, chosen to keep
+the exact `gjs 1.80.2`/ICU pair GNOME Shell 46 ran (§4). Now that `metadata.json`
+declares GNOME Shell 50 (§2), CI's runtime and the only shell this project claims no
+longer match — a different gjs/ICU pair, untested by CI. Not closed here; adding or
+switching CI's runner is a separate decision.
 
 Pure and testable here, run with `gjs -m tests/<name>.js` (GJS runs plain JS with no
 `imports.gi` usage fine, no display required):
@@ -311,8 +315,8 @@ Pure and testable here, run with `gjs -m tests/<name>.js` (GJS runs plain JS wit
 Not testable here, honestly: whether `Main.panel.statusArea.dateMenu._date` and its
 internals actually match what the injection module expects in a real running shell,
 whether the label renders where and how we expect, RTL layout in a Hebrew locale,
-whether the grid genuinely doesn't shift. Those need a real GNOME Shell 46 session
-and a documented manual pass:
+whether the grid genuinely doesn't shift. Those need a real GNOME Shell 50 session
+(the version `metadata.json` declares, §2) and a documented manual pass:
 1. Symlink the extension into `~/.local/share/gnome-shell/extensions/`.
 2. Restart the shell (X11: Alt+F2, `r`; Wayland: log out and back in) and enable it
    via the Extensions app.
@@ -323,7 +327,9 @@ and a documented manual pass:
    lock; confirm no duplicate or leftover label.
 5. Switch to a Hebrew locale and repeat step 3, confirming gematria numerals.
 
-No implementation issue should claim more than this section promises.
+**None of these five steps have been executed.** The one field install (§10) walked
+the clone-and-restart path, not this list — nobody has opened the calendar and
+looked. No implementation issue should claim more than this section promises.
 
 ## 9. Issue breakdown
 
