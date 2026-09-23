@@ -58,15 +58,60 @@ git clone https://github.com/AYA234/HebCal.git \
   ~/.local/share/gnome-shell/extensions/hebcal@aya234.github.io
 ```
 
-Restart GNOME Shell (X11: <kbd>Alt</kbd>+<kbd>F2</kbd>, type `r`, Enter;
-Wayland: log out and back in), then enable **HebCal** via the Extensions
-app.
+**Restart the shell before you enable the extension — not after.** GNOME
+Shell scans the extensions directory only at startup; it does not notice
+a directory that appeared while it was already running. Enabling first
+fails immediately, whether from the Extensions app or the CLI:
 
-This install has not yet been exercised on a running GNOME Shell 46
-session (see Support, above). If it fails to appear, the first place to
-look is `lookupTodayButtonTarget()` in `extension.js` — it's where every
-GNOME-private name this extension depends on is read, and where a mismatch
-against your actual shell would surface first.
+```sh
+$ gnome-extensions enable hebcal@aya234.github.io
+Extension does not exist
+```
+
+That reads like a bad clone path or a typo'd UUID. It isn't — it means
+the shell hasn't scanned the directory yet. The fix is a restart, not a
+different path.
+
+Restart, *then* enable:
+
+- X11: <kbd>Alt</kbd>+<kbd>F2</kbd>, type `r`, Enter. This is X11-only.
+- Wayland: there is no in-session restart. Log out and back in — a full
+  one, not a lock/unlock.
+
+Then enable, via the Extensions app or:
+
+```sh
+gnome-extensions enable hebcal@aya234.github.io
+```
+
+Check what happened with `gnome-extensions info hebcal@aya234.github.io`:
+
+- **`OUT OF DATE`** — the running shell's version isn't covered by
+  `metadata.json`'s `shell-version`. The extension is enabled but was
+  never loaded; nothing renders and nothing else reports a problem.
+- **`ERROR`** — the extension loaded and something threw. As the code
+  currently stands, `enable()` is wholly guarded and returns quietly on
+  any failure in its own work, and `disable()` restores the shell's own
+  method before anything that could fail — so an exception out of our own
+  enable/disable path is not a route to this state. What can still
+  produce it is module evaluation: the `import` statements at the top of
+  `extension.js` resolve before any of our code runs, and no guard inside
+  the extension can cover that. This describes what the current code can
+  and cannot produce, in the present tense — it is not an account of any
+  particular `ERROR` seen on a real machine; no such cause has been
+  established.
+- **`ENABLED` with no error — this does not mean the Hebrew date is
+  rendering.** A missing or wrong-shaped internal is designed to fail
+  silently (see Support, above), so a working install and a silent no-op
+  look identical from this command. The only way to tell them apart is
+  opening the calendar and looking.
+
+This install path has been exercised once: cloned and restarted on a
+machine running GNOME Shell 50.1, with `metadata.json` hand-patched
+locally to declare it, by one person. If nothing appears, the first place
+to look is `lookupTodayButtonTarget()` in `extension.js` — it's where
+every GNOME-private name this extension depends on is read, and where a
+mismatch against your actual shell would surface first.
 
 ## Running the tests
 
