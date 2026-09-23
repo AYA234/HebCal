@@ -211,9 +211,8 @@ show up.
 **Runner:** `gjs`, matching the shell's own mozjs rather than Node's own ICU build.
 It is **not preinstalled** in this environment or assumed present anywhere else —
 installing it (`apt-get update && apt-get install -y gjs`, available in Ubuntu's
-`noble/main`) is a prerequisite step, not a given. There is currently **no CI
-configured in this repository** (no `.github/` directory) — section 8 does not claim
-otherwise; setting one up is not scoped into the four issues in section 9 below.
+`noble/main`) is a prerequisite step, not a given. CI runs the suite on every push
+and pull request via `.github/workflows/tests.yml`, on `ubuntu-24.04`.
 
 Pure and testable here, run with `gjs -m tests/<name>.js` (GJS runs plain JS with no
 `imports.gi` usage fine, no display required):
