@@ -37,8 +37,9 @@ export default class HebCalExtension extends Extension {
 
         // A registered BCP-47 tag is required by formatHebrewDate's
         // contract; GLib.get_language_names()/$LANG hand back POSIX forms
-        // that throw. resolvedOptions().locale is always a valid tag and
-        // needs no gi import (docs/plan.md §10 verified this on gjs 1.80.2).
+        // that throw. resolvedOptions().locale is always a registered tag
+        // and needs no gi import - proven end to end in
+        // tests/hebrewDate.test.js rather than asserted here.
         const locale = Intl.DateTimeFormat().resolvedOptions().locale;
         const label = new St.Label({style_class: found.styleClass});
 
