@@ -23,15 +23,16 @@ interface language otherwise.
 
 ## Support
 
-Targets **GNOME Shell 46**, the default shell on **Ubuntu 24.04 LTS**. No
-support is claimed for GNOME Shell 45, 47, or any other Ubuntu release.
+Targets **GNOME Shell 50** (the `50.x` line). No support is claimed for
+any other major version.
 
-The automated test suite passes under `gjs 1.80.2` (the version Ubuntu
-24.04 ships), but the extension has **not yet been run in a live GNOME
-Shell 46 session** — the manual verification pass in `docs/plan.md` §8 has
-not been executed. Everything in this README about how the Hebrew date
-appears in the calendar describes what the code is written to do, not
-something that has been observed on a running shell.
+That declaration rests on one thing: the extension has been **loaded and
+enabled on one machine running GNOME Shell 50.1** — "Ubuntu" per the
+machine's owner, no release number confirmed, `metadata.json` hand-patched
+locally to get there (that patch has never been in this repo). **Whether
+the Hebrew date actually renders in the calendar popover has still not
+been confirmed by eye on any shell.** `gnome-extensions info` reporting
+`ENABLED` does not tell you that — see Install, below, for why.
 
 This extension works by reaching into GNOME Shell's private internals
 (`Main.panel.statusArea.dateMenu._date`, its `_dateLabel`, and the
@@ -93,3 +94,10 @@ Each file prints its assertion count and exits `0` on success. No display
 and no running GNOME Shell session is required; the tests exercise the
 Hebrew-date conversion, the gematria formatter, and the injection module
 (against a plain-JS fake of `TodayButton`) as pure JavaScript.
+
+CI pins `ubuntu-24.04` (not `ubuntu-latest`) to keep this exact gjs/ICU
+pair — see `docs/plan.md` §8. That pin matches the gjs/ICU pair GNOME
+Shell 46 ran; now that `metadata.json` declares GNOME Shell 50 (see
+Support, above), CI's runtime and the only shell this project claims no
+longer match. Not closed here — adding or switching CI's runner is a
+separate decision.
