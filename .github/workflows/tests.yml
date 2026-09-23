@@ -23,9 +23,11 @@ jobs:
 
       - name: Run test suite
         run: |
-          # Single source of truth for the interpreter invocation. If #5 converts
-          # lib/hebrewDate.js to ESM, flip this one token to "gjs -m".
-          gjs_cmd="gjs"
+          # Single source of truth for the interpreter invocation. The suite is
+          # ESM, so this runs as an array: quoting "-m" into the command name
+          # (e.g. gjs_cmd="gjs -m") makes the shell look for a binary literally
+          # named "gjs -m" and fail with "command not found".
+          gjs_cmd=(gjs -m)
 
           shopt -s nullglob
           tests=(tests/*.test.js)
@@ -38,7 +40,7 @@ jobs:
           status=0
           for test in "${tests[@]}"; do
             echo "== $test =="
-            "$gjs_cmd" "$test" || status=1
+            "${gjs_cmd[@]}" "$test" || status=1
           done
 
           exit "$status"
