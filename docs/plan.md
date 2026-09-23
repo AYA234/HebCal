@@ -89,6 +89,49 @@ failure we're avoiding: patching the instance twice across a disable/enable cycl
 the *original* function once, at `enable()` time, and always restoring exactly that
 reference, keeps re-enable idempotent.
 
+**Widened guard (issue #11).** The description above covers a *missing* surface —
+`enable()` returning quietly when a name isn't there. A first field install (GNOME
+Shell 50.1 against a `shell-version` of `["46"]`) showed that isn't the whole
+failure surface: a name can be *present but the wrong shape*, and the code that
+looks up the live `TodayButton` (`extension.js`'s `lookupTodayButtonTarget()`) was
+calling a method on it (`dateLabel.get_parent()`) with no guard at all, outside
+`enable()`'s reach if that call threw. The guard is now specified more broadly:
+
+- `enable()` must not throw, full stop — not just on a missing name, on any
+  failure anywhere in its own work (a wrong-shaped name, a constructor call, an
+  `Intl` call). It stays a quiet return: no exception, no notification, no
+  logging.
+- Nothing in that work is allowed to leave half-applied state behind on a failure
+  path — if `setDate` was already replaced or the label already added to the box
+  when something failed, that gets undone before returning, not left for the next
+  `enable()` to trip over.
+- `disable()` must not throw either. Restoring `setDate` by identity happens
+  unconditionally, before any attempt to free the label actor, so a failure
+  freeing the actor can never leave the shell's own method un-restored.
+- The wrapped `setDate` itself must not let a formatting failure escape into
+  GNOME's own call site. The original always runs first, unconditionally; if our
+  formatting throws, the Hebrew label is simply left with its previous text.
+  Decided explicitly: the wrapper **keeps trying on every subsequent call** rather
+  than detaching itself after one failure — no extra state to track, and it lets a
+  transient failure (or a locale that later becomes valid) recover on its own
+  without needing a fresh disable/enable cycle.
+- Where possible, this containment lives in the already-testable injection module
+  (`lib/todayButtonInjector.js`) rather than in `extension.js`, which cannot be
+  imported by the `gjs` test suite at all (its module-scope imports resolve
+  against `resource:///` shell paths that don't exist outside a running shell).
+  Resolving the label's parent box (`dateLabel.get_parent()`) moved into
+  `attach()` for exactly this reason — it's a method call that can fail on a
+  wrong-shaped object, and inside `attach()` it's covered by a guard the test
+  suite actually drives.
+
+**What this does not close.** Module-scope `import` statements in `extension.js`
+resolve before any code in that file runs, `enable()` included — no guard written
+in this module can cover them. If a `resource:///` shell-internal path doesn't
+exist on the running shell, that failure happens at import time, outside any
+containment an extension can build for itself. The only real mitigation is the
+`shell-version` declaration in `metadata.json` being accurate, which is a
+separate concern (issue #12), not something this guard can substitute for.
+
 ## 4. Hebrew date computation
 
 **Decided: the platform's own `Intl.DateTimeFormat` with the Hebrew calendar.**
