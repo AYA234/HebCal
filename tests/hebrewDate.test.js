@@ -41,4 +41,18 @@ assertThrows(
     () => formatHebrewDate(someDate, 'he_IL'),
     'POSIX-form locale is rejected even when it names Hebrew');
 
+// Criterion 13's locale source, proven end to end - not just "did not
+// throw". extension.js hands formatHebrewDate this exact expression, and
+// trap two of criterion 13 is a tag ICU silently resolves to something
+// else: no throw, but -u-ca-hebrew is dropped and the label prints the
+// Gregorian date. resolvedOptions().locale is always registered, so
+// formatHebrewDate must accept it, and interpolating -u-ca-hebrew onto it
+// must still resolve to the Hebrew calendar.
+const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale;
+formatHebrewDate(someDate, systemLocale);
+assertEqual(
+    new Intl.DateTimeFormat(`${systemLocale}-u-ca-hebrew`).resolvedOptions().calendar,
+    'hebrew',
+    'the locale extension.js resolves still yields a Hebrew-calendar tag');
+
 print(`hebrewDate.test.js: ${assertCount()} assertions passed`);
