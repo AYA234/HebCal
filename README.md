@@ -3,8 +3,8 @@
 Shows the Hebrew date alongside the Gregorian date in the GNOME Shell top-bar
 calendar. Not a separate app, panel, or indicator — the Hebrew date is added
 as a second line under the existing "Today" date in the stock calendar
-popover, styled to match. If you can tell it's not part of GNOME, that's a
-bug.
+popover, inheriting the existing date label's style class. If you can tell
+it's not part of GNOME, that's a bug.
 
 ## What it shows, and when it changes
 
@@ -23,9 +23,15 @@ interface language otherwise.
 
 ## Support
 
-Built and tested against **GNOME Shell 46**, the default shell on **Ubuntu
-24.04 LTS**. No support is claimed for GNOME Shell 45, 47, or any other
-Ubuntu release — this has not been built or tested against them.
+Targets **GNOME Shell 46**, the default shell on **Ubuntu 24.04 LTS**. No
+support is claimed for GNOME Shell 45, 47, or any other Ubuntu release.
+
+The automated test suite passes under `gjs 1.80.2` (the version Ubuntu
+24.04 ships), but the extension has **not yet been run in a live GNOME
+Shell 46 session** — the manual verification pass in `docs/plan.md` §8 has
+not been executed. Everything in this README about how the Hebrew date
+appears in the calendar describes what the code is written to do, not
+something that has been observed on a running shell.
 
 This extension works by reaching into GNOME Shell's private internals
 (`Main.panel.statusArea.dateMenu._date`, its `_dateLabel`, and the
@@ -54,6 +60,12 @@ git clone https://github.com/AYA234/HebCal.git \
 Restart GNOME Shell (X11: <kbd>Alt</kbd>+<kbd>F2</kbd>, type `r`, Enter;
 Wayland: log out and back in), then enable **HebCal** via the Extensions
 app.
+
+This install has not yet been exercised on a running GNOME Shell 46
+session (see Support, above). If it fails to appear, the first place to
+look is `lookupTodayButtonTarget()` in `extension.js` — it's where every
+GNOME-private name this extension depends on is read, and where a mismatch
+against your actual shell would surface first.
 
 ## Running the tests
 
