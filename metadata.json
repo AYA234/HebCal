@@ -2,6 +2,6 @@
   "uuid": "hebcal@aya234.github.io",
   "name": "HebCal",
   "description": "Shows the Hebrew date alongside the Gregorian date in the GNOME Shell top-bar calendar.",
-  "shell-version": ["46"],
+  "shell-version": ["50"],
   "url": "https://github.com/AYA234/HebCal"
 }
