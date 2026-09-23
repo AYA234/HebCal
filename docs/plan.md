@@ -356,14 +356,26 @@ issue 1, and nothing visual can be tried without issue 3's seam existing first.
 
 ## 10. Open questions
 
-1. All internal names in this plan (`_date`, `_dateLabel`, `_dayLabel`,
-   `TodayButton`, the `date-label`/`day-label` style classes, and the assumption
-   that `setDate` is called on civil-midnight rollover) come from reading the
-   `gnome-46` branch of `gnome-shell` source, not from introspecting a running
-   session. They need confirming against the actual installed Ubuntu 24.04 shell
-   before issue 3 starts. While there, also check whether the compiled theme
-   exposes any named color we could use to dim the Hebrew line without hardcoding
-   one (section 6) — worth a follow-up issue if it does, not required for v1.
-2. Do we pin to exactly GNOME Shell 46.0, or accept the whole 46.x range Ubuntu
-   24.04 has shipped as point updates? Depends on whether the private names in
-   question 1 are stable across those points — unknown from here.
+1. **Still open, and the field report (§2) makes it worse, not better.** All
+   internal names in this plan (`_date`, `_dateLabel`, `_dayLabel`, `TodayButton`,
+   the `date-label`/`day-label` style classes, and the assumption that `setDate` is
+   called on civil-midnight rollover) come from reading the `gnome-46` branch of
+   `gnome-shell` source — nothing has been introspected on a running session; Looking
+   Glass was never opened. Reaching `ENABLED` on the one 50.1 install confirms none
+   of them: the guard (§3) is built so that a wrong or moved name produces exactly
+   that state, and the #11 widening makes this more true, not less — a wrong-shaped
+   name now produces the same silence a missing one does. These names were also read
+   off `gnome-46`; now that `"50"` is declared (§2) they are four majors old, and the
+   gap between where they were read and the shell we declare has widened, not
+   narrowed. Still unconfirmed on any running shell. While confirming them, also
+   check whether the compiled theme exposes any named color we could use to dim the
+   Hebrew line without hardcoding one (section 6) — that sub-question was not
+   checked either, and stays open with it.
+2. **Half-settled.** Settled, by observation rather than prediction: the *failure
+   mode* of an under-declared `shell-version` is `OUT OF DATE` — enabled, never
+   loaded, silent — which is the argument §2 gives for the major-version form. Not
+   settled: whether the private names in question 1 are stable across point
+   releases, which depends on question 1 and stays open with it. A version mismatch
+   itself is not something §3's guard can catch — see §3's *What this does not
+   close* paragraph and #11; the guard is inside `enable()`, and on `OUT OF DATE`
+   the shell never reaches it.
