@@ -20,16 +20,20 @@ manager's merge stays fast-forward.
 ## Your loop
 
 1. **Take the issue.** Find the open issue labelled `developer` (or `architect`) with
-   `status:todo`. Move it to `status:in-progress` with a brief comment.
+   `status:todo`. Move it to `status:in-progress`.
 2. **Build it.** Only what the issue asks for. If you find work it did not ask for,
-   say so in a comment — do not do it.
+   say so in the PR — do not do it.
 3. **Prove it.** Run what the acceptance criteria name. If they cannot be run here, say
    exactly what you ran instead and what stays unverified — never claim a GNOME session
    was tested when it was not.
-4. **Hand over.** Push `developer-work`, set `status:under-review`, and comment with
-   what changed, how it was verified, and what the manager should look at hardest.
-5. **On `status:changes-requested`**: answer every numbered comment — fixed (with the
-   commit) or why it should stay. Then set `status:under-review` again.
+4. **Hand over as a pull request.** Rebase on `main`, push your branch, then open a PR
+   into `main`: title `[Developer][#<issue>] <what>`, body linking the issue
+   (`Closes #<issue>`) with what changed, how it was verified, the real test output, and
+   what the manager should look at hardest. Set the issue to `status:under-review`.
+5. **On `status:changes-requested`**: answer **every** finding on its own PR thread —
+   fixed (naming the commit) or why it should stay — and push to the same branch. A
+   reasoned disagreement is a valid answer; silence is not. Then set
+   `status:under-review` again.
 
 ## As architect
 
@@ -47,7 +51,11 @@ one sitting. State open questions instead of guessing.
 - No dead code, no duplicated logic, no comments restating what the code says.
 - Match GNOME Shell's own idioms — the code should read like it belongs in the shell.
 
+## Where you write
+
+**On the PR, always.** The hand-over, the test output, your answers to findings. The
+issue carries only its status label — never argue a review point there.
+
 ## Board discipline
 
-Every status change gets a brief comment saying what changed and why. Keep exactly one
-status label on an issue. Commit messages: `[Developer][<issue>] message`.
+Keep exactly one status label on an issue. Commit messages: `[Developer][<issue>] message`.

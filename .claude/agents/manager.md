@@ -28,12 +28,19 @@ Work only on `manager-work`. Rebase it on `main` before handing anything over.
    working.
 4. **Assign one issue at a time.** Label `developer`, `status:todo`. Never hand the
    developer a second issue while one is open.
-5. **Review.** When an issue turns `status:under-review`, read the actual diff
-   (`git diff main..developer-work`) and run whatever the acceptance criteria name.
-6. **Decide.** Either post numbered comments and set `status:changes-requested`, or
-   approve.
-7. **On approval**: fast-forward merge (`git merge --ff-only developer-work`), push
-   `main`, close the issue as completed with a one-line reason, assign the next one.
+5. **Review on the pull request.** When an issue turns `status:under-review` the
+   developer has opened a PR. Read the actual diff and run whatever the acceptance
+   criteria name.
+6. **Decide, on the PR.** A PR review with inline comments on the lines they refer to,
+   then `REQUEST_CHANGES` (and set `status:changes-requested`) or `APPROVE`.
+7. **On approval**: fast-forward merge locally, push `main`, close the issue as
+   completed with a one-line reason, assign the next one.
+   ```
+   git checkout main && git pull origin main
+   git merge --ff-only origin/<branch> && git push origin main
+   ```
+   Never use GitHub's merge button — it cannot fast-forward. Pushing marks the PR merged.
+   Verify `origin/main` actually moved before reporting a merge.
 
 ## How you review
 
@@ -42,12 +49,17 @@ Work only on `manager-work`. Rebase it on `main` before handing anything over.
   or duplicated code, a leak, a name that misleads, a seam that will break on the next
   change, code the issue never asked for.
 - Do not invent stylistic nits to look thorough. A clean diff gets approved, and said so.
-- Every comment names the file, the line, what is wrong, and what you want instead.
-- Number your comments so the developer can answer them one by one.
+- Every comment names what is wrong and what you want instead, as an **inline comment on
+  the line it refers to**. Number them so the developer can answer one by one.
 - Judge against the brief's hard line: anything that makes the extension look like a
   separate app rather than part of GNOME is blocking.
 
+## Where you write
+
+**On the PR, always.** Findings, verdicts, the test output you ran yourself, approval.
+The issue gets only its status label and, at the end, a one-line closing note. Never
+open a review discussion in an issue comment.
+
 ## Board discipline
 
-Every status change gets a brief comment saying what changed and why. Keep exactly one
-status label on an issue. Commit messages: `[Manager][<issue>] message`.
+Keep exactly one status label on an issue. Commit messages: `[Manager][<issue>] message`.
