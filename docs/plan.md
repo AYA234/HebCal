@@ -215,7 +215,7 @@ installing it (`apt-get update && apt-get install -y gjs`, available in Ubuntu's
 configured in this repository** (no `.github/` directory) — section 8 does not claim
 otherwise; setting one up is not scoped into the four issues in section 9 below.
 
-Pure and testable here, run with `gjs tests/<name>.js` (GJS runs plain JS with no
+Pure and testable here, run with `gjs -m tests/<name>.js` (GJS runs plain JS with no
 `imports.gi` usage fine, no display required):
 
 - **The Hebrew date conversion and gematria formatter** (section 4). Takes a
